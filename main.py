@@ -121,7 +121,6 @@ def make_message(ref, text):
 
 @tree.command(name="verse", description="Get today's Bible verse")
 async def verse(interaction: discord.Interaction):
-
     await interaction.response.defer()
 
     ref = get_daily_ref()
@@ -181,7 +180,7 @@ async def setpingrole(interaction: discord.Interaction, role: discord.Role):
 
     save_settings(data)
 
-    await interaction.response.send_message(f"✅ Ping role set: {role}")
+    await interaction.response.send_message(f"✅ Ping role set: {role.mention}")
 
 # ---------------- DAILY LOOP ----------------
 
@@ -191,7 +190,6 @@ last_sent = None
 async def daily_verse():
 
     global last_sent
-
     now = datetime.now()
 
     if last_sent == (now.day, now.hour, now.minute):
@@ -217,7 +215,12 @@ async def daily_verse():
 
             msg = make_message(ref, text)
 
-            ping = f"<{cfg['ping_role']}>\n\n" if cfg.get("ping_role") else ""
+            # ---------------- FIXED PING LOGIC ----------------
+            role_id = str(cfg.get("ping_role", ""))
+
+            role_id = role_id.replace("<@&", "").replace(">", "").replace("@", "").strip()
+
+            ping = f"<@&{role_id}>\n\n" if role_id.isdigit() else ""
 
             await channel.send(ping + msg)
 
