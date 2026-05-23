@@ -202,7 +202,9 @@ async def setpingrole(interaction: discord.Interaction, role: discord.Role):
     gid = str(interaction.guild.id)
 
     data.setdefault(gid, {})
-    data[gid]["ping_role"] = str(role.id)
+
+    # ALWAYS store raw ID (int, not string)
+    data[gid]["ping_role"] = role.id
 
     save_settings(data)
 
