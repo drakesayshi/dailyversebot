@@ -72,6 +72,7 @@ def get_daily_ref():
     global VERSES
     if VERSES is None:
         VERSES = load_verses()
+
     return VERSES[get_day_index() % len(VERSES)]
 
 # ---------------- CLEAN ----------------
@@ -168,7 +169,7 @@ async def settime(interaction: discord.Interaction, hour: int, minute: int):
 
     await interaction.response.send_message(f"✅ Time set {hour:02}:{minute:02}")
 
-# ---------------- DAILY LOOP (CLEAN VERSION) ----------------
+# ---------------- DAILY LOOP ----------------
 
 last_sent = None
 
@@ -201,7 +202,8 @@ async def daily_verse():
 
             msg = make_message(ref, text)
 
-            await channel.send(msg)
+            # ---------------- FIXED PING ----------------
+            await channel.send(f"@everyone\n\n{msg}")
 
             last_sent = (now.day, now.hour, now.minute)
 
