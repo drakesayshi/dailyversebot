@@ -72,6 +72,7 @@ def get_daily_ref():
     global VERSES
     if VERSES is None:
         VERSES = load_verses()
+
     return VERSES[get_day_index() % len(VERSES)]
 
 # ---------------- CLEAN ----------------
@@ -112,6 +113,7 @@ def fetch_verse(ref):
 
 def make_message(ref, text):
     return (
+        f"# 📖 Verse of the Day\n\n"
         f"{text}\n\n"
         f"### {format_reference(ref)} • NIV"
     )
@@ -200,10 +202,8 @@ async def daily_verse():
 
             msg = make_message(ref, text)
 
-            # ALWAYS ping everyone
-            ping = "@everyone\n\n"
-
-            await channel.send(ping + msg)
+            # ---------------- FIXED PING ----------------
+            await channel.send(f"@everyone\n\n{msg}")
 
             last_sent = (now.day, now.hour, now.minute)
 
