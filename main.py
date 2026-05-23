@@ -92,30 +92,6 @@ def format_reference(ref):
     book, chapter, verse = ref.split(".")
     return f"{BOOK_NAMES.get(book, book)} {chapter}:{verse}"
 
-# ---------------- AM/PM HELPERS ----------------
-
-def to_24h(hour, ampm):
-    ampm = ampm.lower()
-    if ampm == "pm" and hour != 12:
-        return hour + 12
-    if ampm == "am" and hour == 12:
-        return 0
-    return hour
-
-def to_ampm(hour, minute):
-    suffix = "AM"
-    h = hour
-
-    if hour == 0:
-        h = 12
-    elif hour == 12:
-        suffix = "PM"
-    elif hour > 12:
-        h -= 12
-        suffix = "PM"
-
-    return f"{h:02}:{minute:02} {suffix}"
-
 # ---------------- API ----------------
 
 def fetch_verse(ref):
@@ -152,7 +128,7 @@ async def verse(interaction: discord.Interaction):
 
     await interaction.followup.send(make_message(ref, text))
 
-# ---------------- SETTINGS ----------------
+# ---------------- SET CHANNEL ----------------
 
 @tree.command(name="setchannel", description="Set daily verse channel")
 async def setchannel(interaction: discord.Interaction):
@@ -170,53 +146,29 @@ async def setchannel(interaction: discord.Interaction):
 
     await interaction.response.send_message("✅ Channel set")
 
-# ---------------- TIME (AM/PM VERSION) ----------------
+# ---------------- SET TIME ----------------
 
-@tree.command(name="settime", description="Set daily verse time (AM/PM)")
-async def settime(interaction: discord.Interaction, hour: int, minute: int, ampm: str):
+@tree.command(name="settime", description="Set daily verse time")
+async def settime(interaction: discord.Interaction, hour: int, minute: int):
 
     if not interaction.user.guild_permissions.administrator:
         return await interaction.response.send_message("❌ Admin only", ephemeral=True)
 
-    if not (1 <= hour <= 12 and 0 <= minute <= 59):
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
         return await interaction.response.send_message("❌ Invalid time", ephemeral=True)
-
-    hour_24 = to_24h(hour, ampm)
 
     data = load_settings()
     gid = str(interaction.guild.id)
 
     data.setdefault(gid, {})
-    data[gid]["hour"] = hour_24
+    data[gid]["hour"] = hour
     data[gid]["minute"] = minute
 
     save_settings(data)
 
-    await interaction.response.send_message(
-        f"✅ Time set: {to_ampm(hour_24, minute)}"
-    )
+    await interaction.response.send_message(f"✅ Time set {hour:02}:{minute:02}")
 
-# ---------------- PING ROLE ----------------
-
-@tree.command(name="setpingrole", description="Set ping role")
-async def setpingrole(interaction: discord.Interaction, role: discord.Role):
-
-    if not interaction.user.guild_permissions.administrator:
-        return await interaction.response.send_message("❌ Admin only", ephemeral=True)
-
-    data = load_settings()
-    gid = str(interaction.guild.id)
-
-    data.setdefault(gid, {})
-    data[gid]["ping_role"] = str(role.id)
-
-    save_settings(data)
-
-    await interaction.response.send_message(
-        f"✅ Ping role set: {role.name} (`{role.id}`)"
-    )
-
-# ---------------- DAILY LOOP ----------------
+# ---------------- DAILY LOOP (CLEAN VERSION) ----------------
 
 last_sent = None
 
@@ -249,13 +201,7 @@ async def daily_verse():
 
             msg = make_message(ref, text)
 
-            # ---------------- SAFE PING ----------------
-            role_id = str(cfg.get("ping_role", "")).strip()
-            role_id = role_id.replace("<@&", "").replace(">", "").replace("@", "")
-
-            ping = f"<@&{role_id}>\n\n" if role_id.isdigit() else ""
-
-            await channel.send(ping + msg)
+            await channel.send(msg)
 
             last_sent = (now.day, now.hour, now.minute)
 
