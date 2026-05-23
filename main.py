@@ -5,6 +5,7 @@ import requests
 import json
 import os
 import re
+import random
 from datetime import datetime
 
 # ---------------- CONFIG ----------------
@@ -16,7 +17,7 @@ BIBLE_ID = "78a9f6124f344018-01"
 SETTINGS_FILE = "settings.json"
 VERSES_FILE = "verses.json"
 
-# ---------------- SAFETY CHECKS ----------------
+# ---------------- SAFETY ----------------
 
 if not TOKEN:
     raise Exception("Missing DISCORD_TOKEN")
@@ -24,11 +25,15 @@ if not TOKEN:
 if not API_KEY:
     raise Exception("Missing BIBLE_API_KEY")
 
-# ---------------- BOT SETUP ----------------
+# ---------------- BOT ----------------
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
+
+# ---------------- GLOBAL STATE ----------------
+
+DAY_OVERRIDE = None
 
 # ---------------- FILE INIT ----------------
 
@@ -37,9 +42,12 @@ def ensure_files():
         with open(SETTINGS_FILE, "w") as f:
             f.write("{}")
 
+    if not os.path.exists(VERSES_FILE):
+        raise Exception("verses.json missing")
+
 ensure_files()
 
-# ---------------- STORAGE ----------------
+# ---------------- SETTINGS ----------------
 
 def load_settings():
     try:
@@ -55,25 +63,42 @@ def save_settings(data):
     with open(SETTINGS_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
+# ---------------- VERSES + SHUFFLE SYSTEM ----------------
+
+VERSES = None
+SHUFFLED_VERSES = None
+SHUFFLE_DAY = None
+
 def load_verses():
-    if not os.path.exists(VERSES_FILE):
-        raise Exception("verses.json missing")
     with open(VERSES_FILE, "r") as f:
         return json.load(f)
 
-VERSES = None
-
-# ---------------- DAILY LOGIC ----------------
-
 def get_day_index():
+    global DAY_OVERRIDE
+    if DAY_OVERRIDE is not None:
+        return DAY_OVERRIDE
     return datetime.now().timetuple().tm_yday
 
-def get_daily_ref():
-    global VERSES
+def get_shuffled_verses():
+    global VERSES, SHUFFLED_VERSES, SHUFFLE_DAY
+
     if VERSES is None:
         VERSES = load_verses()
 
-    return VERSES[get_day_index() % len(VERSES)]
+    today_year = datetime.now().year
+
+    # reshuffle once per year
+    if SHUFFLED_VERSES is None or SHUFFLE_DAY != today_year:
+        SHUFFLED_VERSES = VERSES[:]
+        random.shuffle(SHUFFLED_VERSES)
+        SHUFFLE_DAY = today_year
+
+    return SHUFFLED_VERSES
+
+def get_daily_ref():
+    verses = get_shuffled_verses()
+    day = get_day_index()
+    return verses[day % len(verses)]
 
 # ---------------- CLEAN ----------------
 
@@ -129,7 +154,7 @@ async def verse(interaction: discord.Interaction):
 
     await interaction.followup.send(make_message(ref, text))
 
-# ---------------- SET CHANNEL ----------------
+# ---------------- SETTINGS ----------------
 
 @tree.command(name="setchannel", description="Set daily verse channel")
 async def setchannel(interaction: discord.Interaction):
@@ -146,8 +171,6 @@ async def setchannel(interaction: discord.Interaction):
     save_settings(data)
 
     await interaction.response.send_message("✅ Channel set")
-
-# ---------------- SET TIME ----------------
 
 @tree.command(name="settime", description="Set daily verse time")
 async def settime(interaction: discord.Interaction, hour: int, minute: int):
@@ -169,7 +192,47 @@ async def settime(interaction: discord.Interaction, hour: int, minute: int):
 
     await interaction.response.send_message(f"✅ Time set {hour:02}:{minute:02}")
 
-# ---------------- DAILY LOOP ----------------
+@tree.command(name="setpingrole", description="Set ping role")
+async def setpingrole(interaction: discord.Interaction, role: discord.Role):
+
+    if not interaction.user.guild_permissions.administrator:
+        return await interaction.response.send_message("❌ Admin only", ephemeral=True)
+
+    data = load_settings()
+    gid = str(interaction.guild.id)
+
+    data.setdefault(gid, {})
+    data[gid]["ping_role"] = str(role.id)
+
+    save_settings(data)
+
+    await interaction.response.send_message(f"✅ Ping role set: {role.mention}")
+
+# ---------------- DAY CONTROL ----------------
+
+@tree.command(name="setday", description="Override verse day (testing)")
+async def setday(interaction: discord.Interaction, day: int):
+
+    global DAY_OVERRIDE
+
+    if not interaction.user.guild_permissions.administrator:
+        return await interaction.response.send_message("❌ Admin only", ephemeral=True)
+
+    DAY_OVERRIDE = day
+    await interaction.response.send_message(f"✅ Day override set to {day}")
+
+@tree.command(name="resetday", description="Reset day override")
+async def resetday(interaction: discord.Interaction):
+
+    global DAY_OVERRIDE
+
+    if not interaction.user.guild_permissions.administrator:
+        return await interaction.response.send_message("❌ Admin only", ephemeral=True)
+
+    DAY_OVERRIDE = None
+    await interaction.response.send_message("✅ Day reset")
+
+# ---------------- LOOP ----------------
 
 last_sent = None
 
@@ -202,8 +265,9 @@ async def daily_verse():
 
             msg = make_message(ref, text)
 
-            # ---------------- FIXED PING ----------------
-            await channel.send(f"@everyone\n\n{msg}")
+            ping = f"<@&{cfg['ping_role']}>\n\n" if cfg.get("ping_role") else ""
+
+            await channel.send(ping + msg)
 
             last_sent = (now.day, now.hour, now.minute)
 
