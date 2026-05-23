@@ -181,7 +181,7 @@ async def setpingrole(interaction: discord.Interaction, role: discord.Role):
 
     save_settings(data)
 
-    await interaction.response.send_message(f"✅ Ping role set: {role.mention}")
+    await interaction.response.send_message(f"✅ Ping role set: {role}")
 
 # ---------------- DAILY LOOP ----------------
 
@@ -217,7 +217,7 @@ async def daily_verse():
 
             msg = make_message(ref, text)
 
-            ping = f"<@&{cfg['ping_role']}>\n\n" if cfg.get("ping_role") else ""
+            ping = f"<{cfg['ping_role']}>\n\n" if cfg.get("ping_role") else ""
 
             await channel.send(ping + msg)
 
