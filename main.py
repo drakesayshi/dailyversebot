@@ -1,4 +1,3 @@
-
 import discord
 from discord import app_commands
 from discord.ext import tasks
@@ -10,12 +9,20 @@ from datetime import datetime
 
 # ---------------- CONFIG ----------------
 
-TOKEN = os.getenv("DISCORD_TOKEN")  # IMPORTANT: use env var
+TOKEN = os.getenv("DISCORD_TOKEN")
 API_KEY = os.getenv("BIBLE_API_KEY")
 
 BIBLE_ID = "78a9f6124f344018-01"  # NIV
 SETTINGS_FILE = "settings.json"
 VERSES_FILE = "verses.json"
+
+# ---------------- SAFETY CHECKS ----------------
+
+if not TOKEN:
+    raise Exception("Missing DISCORD_TOKEN in environment variables")
+
+if not API_KEY:
+    raise Exception("Missing BIBLE_API_KEY in environment variables")
 
 # ---------------- BOT SETUP ----------------
 
@@ -42,7 +49,8 @@ def load_verses():
     with open(VERSES_FILE, "r") as f:
         return json.load(f)
 
-VERSES = load_verses()
+# Lazy load (IMPORTANT for Railway stability)
+VERSES = None
 
 # ---------------- DAILY VERSE LOGIC ----------------
 
@@ -50,6 +58,10 @@ def get_day_index():
     return datetime.now().timetuple().tm_yday
 
 def get_daily_ref():
+    global VERSES
+    if VERSES is None:
+        VERSES = load_verses()
+
     day = get_day_index()
     return VERSES[day % len(VERSES)]
 
@@ -87,6 +99,7 @@ def fetch_verse(ref):
         return clean_html(text)
 
     except Exception as e:
+        print(f"API error for {ref}: {e}")
         return f"Verse unavailable ({ref})"
 
 # ---------------- MESSAGE ----------------
