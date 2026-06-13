@@ -203,7 +203,7 @@ async def daily_verse():
             msg = make_message(ref, text)
 
             # ---------------- FIXED PING ----------------
-            await channel.send(f"@everyone\n\n{msg}")
+            await channel.send(msg)
 
             last_sent = (now.day, now.hour, now.minute)
 
